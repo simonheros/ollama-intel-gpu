@@ -3,10 +3,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        IPEXLLM_RELEASE_REPO: intel/ipex-llm
-        IPEXLLM_RELEASE_VERSON: v2.2.0
-        IPEXLLM_PORTABLE_ZIP_FILENAME: ollama-ipex-llm-2.2.0-ubuntu.tgz
     container_name: ollama-intel-gpu
     restart: always
     devices:
@@ -14,21 +10,25 @@ services:
     volumes:
       - ollama-intel-gpu:/root/.ollama
     environment:
-      - ONEAPI_DEVICE_SELECTOR=level_zero:0
-      # GPU configuration for Intel Arc GPUs
-      - OLLAMA_NUM_GPU=2
-      - OLLAMA_NUM_PARALLEL=2
-      - OLLAMA_MAX_LOADED_MODELS=4
-      - OLLAMA_GPU_MEMORY_UTILIZATION=0.95
-      # Memory and performance tuning
+      # Intel GPU configuration - CRITICAL
+      - OLLAMA_GPU_DRIVER=opencl
+      - ONEAPI_DEVICE_SELECTOR=opencl:0
+      
+      # GPU settings
+      - OLLAMA_GPUS=2
       - OLLAMA_MAX_VRAM=32768  # 32GB total VRAM (2x16GB)
-      - OLLAMA_HOST=0.0.0.0
-      # AMD CPU optimization
+      
+      # Performance tuning
       - OLLAMA_FLASH_ATTENTION=1
-      - OLLAMA_NUM_CPU=32  # 5950X has 16 cores/32 threads
+      - OLLAMA_NUM_CPU=32
       - OLLAMA_KEEP_ALIVE=0
+      - OLLAMA_HOST=0.0.0.0
     shm_size: 16g
     mem_limit: 80g
+    privileged: true
+    group_add:
+      - "44"  # video group
+      - "107" # render group
     
   ollama-webui:
     image: ghcr.io/open-webui/open-webui
