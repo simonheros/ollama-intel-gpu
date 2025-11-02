@@ -25,25 +25,45 @@ RUN mkdir -p /tmp/gpu && cd /tmp/gpu && \
     apt install -y ./*.deb && \
     cd / && rm -rf /tmp/gpu
 
-# Download IPEX-LLM and extract with better debugging
+# First, let's check what files are available in the IPEX-LLM release
+RUN echo "Checking available IPEX-LLM releases..." && \
+    curl -s https://api.github.com/repos/intel/ipex-llm/releases/tags/v2.2.0 | grep -o '"name": "[^"]*"' | cut -d'"' -f4 | grep -E "(ollama|llama)" || true
+
+# Download the correct IPEX-LLM file - based on common naming patterns
 RUN cd /tmp && \
-    echo "Downloading IPEX-LLM..." && \
-    wget -q --tries=3 --timeout=60 https://github.com/intel/ipex-llm/releases/download/v2.2.0/llama-cpp-ipex-llm-2.2.0-ubuntu-core.tgz && \
-    echo "Extracting archive..." && \
-    tar -tzf llama-cpp-ipex-llm-2.2.0-ubuntu-core.tgz && \
-    echo "Full extraction..." && \
-    tar xzf llama-cpp-ipex-llm-2.2.0-ubuntu-core.tgz -C / && \
-    rm -f llama-cpp-ipex-llm-2.2.0-ubuntu-core.tgz && \
-    echo "Looking for ollama binary..." && \
-    find / -name "ollama" -type f 2>/dev/null
+    echo "Trying different IPEX-LLM package names..." && \
+    for package in \
+        "ipex-llm-ollama-2.2.0-linux-x86_64.tgz" \
+        "ollama-ipex-llm-2.2.0-linux-x86_64.tgz" \
+        "ipex-llm-ollama-v2.2.0-linux-x86_64.tgz" \
+        "ollama-linux-x86_64-2.2.0.tgz" \
+        "ipex-llm-ollama-ubuntu-2.2.0.tgz"; do \
+        echo "Attempting to download: $package" && \
+        if wget -q --tries=2 --timeout=30 "https://github.com/intel/ipex-llm/releases/download/v2.2.0/${package}"; then \
+            echo "Successfully downloaded: $package" && \
+            echo "Archive contents:" && \
+            tar -tzf "$package" | head -20 && \
+            echo "Extracting..." && \
+            tar xzf "$package" -C / && \
+            rm -f "$package" && \
+            echo "Extraction completed for: $package" && \
+            break; \
+        fi; \
+    done
+
+# Alternative: If the above fails, try to install Ollama normally and then add IPEX-LLM support
+RUN if [ ! -f "/usr/local/bin/ollama" ] && [ ! -f "/bin/ollama" ] && [ ! -f "/usr/bin/ollama" ]; then \
+    echo "IPEX-LLM packages not found, installing standard Ollama..." && \
+    curl -fsSL https://ollama.ai/install.sh | sh; \
+    fi
 
 # Set PATH to include common binary locations
-ENV PATH="/usr/local/bin:/bin:/usr/bin:/app:/ollama:${PATH}"
+ENV PATH="/usr/local/bin:/bin:/usr/bin:/app:${PATH}"
 
 ENV OLLAMA_HOST=0.0.0.0:11434
 
-# Create a more robust start script
-RUN printf '#!/bin/bash\nset -e\necho "Starting Ollama with IPEX-LLM..."\necho "OLLAMA_HOST: $OLLAMA_HOST"\n\n# Find ollama binary\nOLLAMA_BIN=$(find / -name "ollama" -type f 2>/dev/null | head -1)\nif [ -z "$OLLAMA_BIN" ]; then\n    echo "Error: ollama binary not found!"\n    echo "Searching for executable files..."\n    find / -type f -executable -name "*ollama*" 2>/dev/null | head -10\n    exit 1\nfi\n\necho "Found ollama at: $OLLAMA_BIN"\necho "Starting Ollama server..."\nexec "$OLLAMA_BIN" serve\n' > /start-ollama.sh && \
+# Create a robust start script that works with or without IPEX-LLM
+RUN printf '#!/bin/bash\nset -e\necho "Starting Ollama..."\necho "OLLAMA_HOST: $OLLAMA_HOST"\n\n# Find ollama binary\nOLLAMA_BIN=$(which ollama 2>/dev/null || find / -name "ollama" -type f 2>/dev/null | head -1)\nif [ -z "$OLLAMA_BIN" ]; then\n    echo "Error: ollama binary not found!"\n    echo "Available binaries:"\n    find / -type f -executable 2>/dev/null | grep -i ollama | head -10 || echo "No ollama-related executables found"\n    exit 1\nfi\n\necho "Found ollama at: $OLLAMA_BIN"\necho "Starting Ollama server..."\nexec "$OLLAMA_BIN" serve\n' > /start-ollama.sh && \
     chmod +x /start-ollama.sh
 
 ENTRYPOINT ["/bin/bash", "/start-ollama.sh"]
