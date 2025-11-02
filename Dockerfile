@@ -30,13 +30,26 @@ RUN mkdir -p /tmp/gpu && \
     cd / && \
     rm -rf /tmp/gpu
 
-# Install Ollama Portable Zip
-ARG IPEXLLM_PORTABLE_ZIP_FILENAME=ollama-ipex-llm-2.2.0-ubuntu.tgz
-RUN cd / && \
-    wget https://github.com/intel/ipex-llm/releases/download/v2.2.0/${IPEXLLM_PORTABLE_ZIP_FILENAME} && \
-    tar xvf ${IPEXLLM_PORTABLE_ZIP_FILENAME} --strip-components=1 -C / && \
-    rm ${IPEXLLM_PORTABLE_ZIP_FILENAME}
+# Download and install IPEX-LLM Ollama with multiple fallbacks
+RUN cd /tmp && \
+    # Try direct download first
+    (wget -q https://github.com/intel/ipex-llm/releases/download/v2.2.0/ollama-ipex-llm-2.2.0-ubuntu.tgz || \
+    curl -L -o ollama-ipex-llm-2.2.0-ubuntu.tgz https://github.com/intel/ipex-llm/releases/download/v2.2.0/ollama-ipex-llm-2.2.0-ubuntu.tgz) && \
+    # Extract to root
+    tar xvf ollama-ipex-llm-2.2.0-ubuntu.tgz --strip-components=1 -C / && \
+    rm -f ollama-ipex-llm-2.2.0-ubuntu.tgz
 
 ENV OLLAMA_HOST=0.0.0.0:11434
+
+# Ensure start script exists
+RUN if [ ! -f "/start-ollama.sh" ]; then \
+    cat > /start-ollama.sh << 'EOF'
+#!/bin/bash
+echo "Starting Ollama with IPEX-LLM..."
+echo "OLLAMA_HOST: $OLLAMA_HOST"
+ollama serve
+EOF
+    chmod +x /start-ollama.sh; \
+    fi
 
 ENTRYPOINT ["/bin/bash", "/start-ollama.sh"]
