@@ -30,19 +30,17 @@ RUN mkdir -p /tmp/gpu && cd /tmp/gpu && \
 # Install Ollama using the official method
 RUN curl -fsSL https://ollama.ai/install.sh | sh
 
-# Install IPEX-LLM directly from PyPI (correct approach)
+# Install Python and basic dependencies first
 RUN apt update && \
-    apt install -y python3 python3-pip && \
-    pip3 install ipex-llm[all] && \
+    apt install -y python3 python3-pip python3-venv && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 
 # Set environment variables
 ENV OLLAMA_HOST=0.0.0.0:11434
-ENV IPEX_LLM_GPU_RUNTIME=opencl
 
-# Create start script
-RUN printf '#!/bin/bash\necho "Starting Ollama with Intel GPU support..."\necho "OLLAMA_HOST: $OLLAMA_HOST"\necho "IPEX-LLM installed for GPU acceleration"\n\n# Test GPU availability\necho "Available GPU devices:"\nls -la /dev/dri/ 2>/dev/null || echo "No DRI devices - running in CPU mode"\n\necho "Starting Ollama server..."\nexec ollama serve\n' > /start-ollama.sh && \
+# Create start script without IPEX-LLM for now
+RUN printf '#!/bin/bash\necho "Starting Ollama with Intel GPU support..."\necho "OLLAMA_HOST: $OLLAMA_HOST"\necho ""\necho "Checking GPU devices:"\nls -la /dev/dri/ 2>/dev/null || echo "No DRI devices found"\necho ""\necho "Starting Ollama server..."\nexec ollama serve\n' > /start-ollama.sh && \
     chmod +x /start-ollama.sh
 
 ENTRYPOINT ["/bin/bash", "/start-ollama.sh"]
