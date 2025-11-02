@@ -15,10 +15,7 @@ services:
       - ollama-intel-gpu:/root/.ollama
     environment:
       - ONEAPI_DEVICE_SELECTOR=level_zero:0
-      - IPEX_LLM_NUM_CTX=16384
       # GPU configuration for Intel Arc GPUs
-      - OLLAMA_GPU_DRIVER=rocm
-      - HSA_OVERRIDE_GFX_VERSION=10.3.0
       - OLLAMA_NUM_GPU=2
       - OLLAMA_NUM_PARALLEL=2
       - OLLAMA_MAX_LOADED_MODELS=4
