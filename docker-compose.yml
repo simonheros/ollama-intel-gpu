@@ -16,6 +16,27 @@ services:
     environment:
       - ONEAPI_DEVICE_SELECTOR=level_zero:0
       - IPEX_LLM_NUM_CTX=16384
+      # GPU configuration for Intel Arc GPUs
+      - OLLAMA_GPU_DRIVER=rocm
+      - HSA_OVERRIDE_GFX_VERSION=10.3.0
+      - OLLAMA_NUM_GPU=2
+      - OLLAMA_NUM_PARALLEL=2
+      - OLLAMA_MAX_LOADED_MODELS=4
+      - OLLAMA_GPU_MEMORY_UTILIZATION=0.95
+      
+      # Memory and performance tuning
+      - OLLAMA_MAX_VRAM=32768  # 32GB total VRAM (2x16GB)
+      - OLLAMA_HOST=0.0.0.0
+      
+      # AMD CPU optimization
+      - OLLAMA_FLASH_ATTENTION=1
+      - OLLAMA_NUM_CPU=32  # 5950X has 16 cores/32 threads
+
+      - OLLAMA_KEEP_ALIVE=0
+
+      shm_size: 16g
+      mem_limit: 80g
+      
   ollama-webui:
     image: ghcr.io/open-webui/open-webui
     container_name: ollama-webui
