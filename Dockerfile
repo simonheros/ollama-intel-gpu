@@ -25,30 +25,29 @@ RUN mkdir -p /tmp/gpu && cd /tmp/gpu && \
     apt install -y ./*.deb && \
     cd / && rm -rf /tmp/gpu
 
-# Download IPEX-LLM Ollama
+# Try multiple possible IPEX-LLM filenames
 RUN cd /tmp && \
-    echo "Downloading IPEX-LLM Ollama..." && \
-    if ! wget -q --tries=3 --timeout=60 https://github.com/intel/ipex-llm/releases/download/v2.2.0/ollama-ipex-llm-2.2.0-ubuntu.tgz; then \
-        echo "wget failed, trying curl..." && \
-        curl -L -f -o ollama-ipex-llm-2.2.0-ubuntu.tgz https://github.com/intel/ipex-llm/releases/download/v2.2.0/ollama-ipex-llm-2.2.0-ubuntu.tgz; \
-    fi && \
-    echo "Verifying download..." && \
-    if [ ! -f "ollama-ipex-llm-2.2.0-ubuntu.tgz" ]; then \
-        echo "Download failed - file not found"; \
-        exit 1; \
-    fi && \
-    echo "Extracting..." && \
-    tar xvf ollama-ipex-llm-2.2.0-ubuntu.tgz --strip-components=1 -C / && \
-    rm -f ollama-ipex-llm-2.2.0-ubuntu.tgz && \
-    echo "Extraction completed"
+    for filename in \
+        "ollama-ipex-llm-2.2.0-ubuntu.tgz" \
+        "ollama-ipex-llm-cpu-2.2.0-ubuntu.tgz" \
+        "llama-cpp-ipex-llm-2.2.0-ubuntu-core.tgz"; do \
+        echo "Trying to download: $filename" && \
+        if wget -q --tries=2 --timeout=30 "https://github.com/intel/ipex-llm/releases/download/v2.2.0/${filename}"; then \
+            echo "Successfully downloaded: $filename" && \
+            tar xvf "${filename}" --strip-components=1 -C / && \
+            rm -f "${filename}" && \
+            echo "Successfully extracted: $filename" && \
+            break; \
+        else \
+            echo "Failed to download: $filename" && \
+            rm -f "${filename}"; \
+        fi; \
+    done
 
 ENV OLLAMA_HOST=0.0.0.0:11434
 
-# Create start script using echo commands
-RUN echo '#!/bin/bash' > /start-ollama.sh && \
-    echo 'echo "Starting Ollama with IPEX-LLM..."' >> /start-ollama.sh && \
-    echo 'echo "OLLAMA_HOST: $OLLAMA_HOST"' >> /start-ollama.sh && \
-    echo 'exec ollama serve' >> /start-ollama.sh && \
+# Create start script - simple and reliable approach
+RUN printf '#!/bin/bash\necho "Starting Ollama with IPEX-LLM..."\necho "OLLAMA_HOST: $OLLAMA_HOST"\nexec ollama serve\n' > /start-ollama.sh && \
     chmod +x /start-ollama.sh
 
 ENTRYPOINT ["/bin/bash", "/start-ollama.sh"]
