@@ -23,20 +23,16 @@ services:
       - OLLAMA_NUM_PARALLEL=2
       - OLLAMA_MAX_LOADED_MODELS=4
       - OLLAMA_GPU_MEMORY_UTILIZATION=0.95
-      
       # Memory and performance tuning
       - OLLAMA_MAX_VRAM=32768  # 32GB total VRAM (2x16GB)
       - OLLAMA_HOST=0.0.0.0
-      
       # AMD CPU optimization
       - OLLAMA_FLASH_ATTENTION=1
       - OLLAMA_NUM_CPU=32  # 5950X has 16 cores/32 threads
-
       - OLLAMA_KEEP_ALIVE=0
-
-      shm_size: 16g
-      mem_limit: 80g
-      
+    shm_size: 16g
+    mem_limit: 80g
+    
   ollama-webui:
     image: ghcr.io/open-webui/open-webui
     container_name: ollama-webui
@@ -51,6 +47,7 @@ services:
     extra_hosts:
       - host.docker.internal:host-gateway
     restart: unless-stopped
+
 volumes:
   ollama-webui: {}
   ollama-intel-gpu: {}
