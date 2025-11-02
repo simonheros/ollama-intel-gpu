@@ -8,21 +8,11 @@ RUN apt update && \
     software-properties-common \
     ca-certificates \
     wget \
-    curl \
-    gnupg && \
+    curl && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Add Intel GPU repository for Level Zero packages
-RUN wget -q -O - https://repositories.intel.com/gpu/intel-graphics.key | gpg --dearmor > /usr/share/keyrings/intel-graphics.gpg && \
-    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu jammy main" > /etc/apt/sources.list.d/intel-gpu.list && \
-    apt update
-
-# Install Intel GPU drivers with Level Zero support
-RUN apt install -y intel-level-zero-gpu level-zero level-zero-devel && \
-    apt clean && rm -rf /var/lib/apt/lists/*
-
-# Install Intel GPU compute user-space drivers
+# Install Intel GPU drivers from manual .deb files only
 RUN mkdir -p /tmp/gpu && cd /tmp/gpu && \
     wget -q https://github.com/oneapi-src/level-zero/releases/download/v1.25.2/level-zero_1.25.2+u24.04_amd64.deb && \
     wget -q https://github.com/intel/intel-graphics-compiler/releases/download/v2.20.3/intel-igc-core-2_2.20.3+19972_amd64.deb && \
@@ -33,12 +23,6 @@ RUN mkdir -p /tmp/gpu && cd /tmp/gpu && \
     wget -q https://github.com/intel/compute-runtime/releases/download/25.40.35563.4/libze-intel-gpu1_25.40.35563.4-0_amd64.deb && \
     apt install -y ./*.deb && \
     cd / && rm -rf /tmp/gpu
-
-# Install Python and basic dependencies
-RUN apt update && \
-    apt install -y python3 python3-pip python3-venv && \
-    apt clean && \
-    rm -rf /var/lib/apt/lists/*
 
 # Install IPEX-LLM Ollama from official Intel release
 RUN cd /tmp && \
@@ -57,7 +41,7 @@ ENV ONEAPI_DEVICE_SELECTOR=level_zero:gpu
 ENV ZES_ENABLE_SYSMAN=1
 
 # Create startup script
-RUN printf '#!/bin/bash\necho "=== Intel IPEX-LLM Ollama with oneAPI/Level Zero === "\necho "Using Level Zero backend for Intel GPUs"\necho ""\necho "Environment:"\necho "  SYCL_DEVICE_FILTER: $SYCL_DEVICE_FILTER"\necho "  ONEAPI_DEVICE_SELECTOR: $ONEAPI_DEVICE_SELECTOR"\necho ""\necho "GPU Devices:"\nls -la /dev/dri/ 2>/dev/null || echo "No DRI devices"\necho ""\necho "Starting Ollama with Level Zero acceleration..."\nexec ollama serve\n' > /start-ollama.sh && \
+RUN printf '#!/bin/bash\necho "=== Intel IPEX-LLM Ollama === "\necho "Using Level Zero backend for Intel GPUs"\necho ""\necho "GPU Devices:"\nls -la /dev/dri/ 2>/dev/null || echo "No DRI devices"\necho ""\necho "Starting Ollama with Intel GPU acceleration..."\nexec ollama serve\n' > /start-ollama.sh && \
     chmod +x /start-ollama.sh
 
 ENTRYPOINT ["/bin/bash", "/start-ollama.sh"]
