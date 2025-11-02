@@ -17,14 +17,9 @@ RUN mkdir -p /tmp/gpu && \
  wget https://github.com/oneapi-src/level-zero/releases/download/v1.25.2/level-zero_1.25.2+u24.04_amd64.deb && \ 
  wget https://github.com/intel/intel-graphics-compiler/releases/download/v2.20.3/intel-igc-core-2_2.20.3+19972_amd64.deb && \
  wget https://github.com/intel/intel-graphics-compiler/releases/download/v2.20.3/intel-igc-opencl-2_2.20.3+19972_amd64.deb && \
-
- ##
  wget https://github.com/intel/compute-runtime/releases/download/25.09.32961.7/intel-level-zero-gpu_1.6.32961.7_amd64.deb && \
-
- 
  wget https://github.com/intel/compute-runtime/releases/download/25.09.32961.7/intel-opencl-icd_25.09.32961.7_amd64.deb && \
  wget https://github.com/intel/compute-runtime/releases/download/25.09.32961.7/libigdgmm12_22.6.0_amd64.deb && \
-
  wget https://github.com/intel/compute-runtime/releases/download/25.40.35563.4/intel-ocloc-dbgsym_25.40.35563.4-0_amd64.ddeb  && \
  wget https://github.com/intel/compute-runtime/releases/download/25.40.35563.4/intel-ocloc_25.40.35563.4-0_amd64.deb  && \
  wget https://github.com/intel/compute-runtime/releases/download/25.40.35563.4/intel-opencl-icd-dbgsym_25.40.35563.4-0_amd64.ddeb  && \
@@ -32,9 +27,6 @@ RUN mkdir -p /tmp/gpu && \
  wget https://github.com/intel/compute-runtime/releases/download/25.40.35563.4/libigdgmm12_22.8.2_amd64.deb && \
  wget https://github.com/intel/compute-runtime/releases/download/25.40.35563.4/libze-intel-gpu1-dbgsym_25.40.35563.4-0_amd64.ddeb  && \
  wget https://github.com/intel/compute-runtime/releases/download/25.40.35563.4/libze-intel-gpu1_25.40.35563.4-0_amd64.deb  && \
-
-
- ##
  dpkg -i *.deb && \
  rm *.deb
 
