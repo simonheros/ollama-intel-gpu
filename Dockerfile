@@ -25,7 +25,7 @@ RUN mkdir -p /tmp/gpu && cd /tmp/gpu && \
     apt install -y ./*.deb && \
     cd / && rm -rf /tmp/gpu
 
-# Try multiple possible IPEX-LLM filenames
+# Download and extract IPEX-LLM with proper structure inspection
 RUN cd /tmp && \
     for filename in \
         "ollama-ipex-llm-2.2.0-ubuntu.tgz" \
@@ -34,8 +34,17 @@ RUN cd /tmp && \
         echo "Trying to download: $filename" && \
         if wget -q --tries=2 --timeout=30 "https://github.com/intel/ipex-llm/releases/download/v2.2.0/${filename}"; then \
             echo "Successfully downloaded: $filename" && \
-            tar xvf "${filename}" --strip-components=1 -C / && \
+            echo "Contents of the archive:" && \
+            tar -tzf "${filename}" | head -20 && \
+            echo "Extracting to /tmp/ipex-llm..." && \
+            mkdir -p /tmp/ipex-llm && \
+            tar xzf "${filename}" -C /tmp/ipex-llm && \
+            echo "Looking for ollama binary..." && \
+            find /tmp/ipex-llm -name "ollama" -type f && \
+            echo "Moving contents to root..." && \
+            cp -r /tmp/ipex-llm/* / || cp -r /tmp/ipex-llm/.* / 2>/dev/null || true && \
             rm -f "${filename}" && \
+            rm -rf /tmp/ipex-llm && \
             echo "Successfully extracted: $filename" && \
             break; \
         else \
@@ -44,10 +53,17 @@ RUN cd /tmp && \
         fi; \
     done
 
+# Verify ollama binary exists and set permissions
+RUN find / -name "ollama" -type f 2>/dev/null | head -5 && \
+    ls -la /usr/local/bin/ollama 2>/dev/null || ls -la /bin/ollama 2>/dev/null || ls -la /usr/bin/ollama 2>/dev/null || echo "Ollama binary not found in standard locations"
+
+# Add possible binary locations to PATH
+ENV PATH="/usr/local/bin:/bin:/usr/bin:/app:${PATH}"
+
 ENV OLLAMA_HOST=0.0.0.0:11434
 
-# Create start script - simple and reliable approach
-RUN printf '#!/bin/bash\necho "Starting Ollama with IPEX-LLM..."\necho "OLLAMA_HOST: $OLLAMA_HOST"\nexec ollama serve\n' > /start-ollama.sh && \
+# Create start script that finds the ollama binary
+RUN printf '#!/bin/bash\necho "Starting Ollama with IPEX-LLM..."\necho "OLLAMA_HOST: $OLLAMA_HOST"\necho "Looking for ollama binary..."\nwhich ollama || find / -name "ollama" -type f 2>/dev/null | head -5\necho "Starting Ollama..."\nollama serve\n' > /start-ollama.sh && \
     chmod +x /start-ollama.sh
 
 ENTRYPOINT ["/bin/bash", "/start-ollama.sh"]
