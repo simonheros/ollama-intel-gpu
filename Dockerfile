@@ -3,7 +3,7 @@ FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=America/Los_Angeles
 
-# Base packages and Intel GPU setup in single layer
+# Base packages and Intel GPU setup
 RUN apt-get update && \
     apt-get install --no-install-recommends -y \
         software-properties-common \
@@ -22,21 +22,21 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Remove the manual .deb installation section - it's redundant and causes conflicts
-# The repository approach above already installs these packages properly
+# Install Ollama - Use official Ollama instead of IPEX-LLM portable
+RUN wget https://ollama.com/download/ollama-linux-amd64 && \
+    chmod +x ollama-linux-amd64 && \
+    mv ollama-linux-amd64 /usr/local/bin/ollama
 
-# Install Ollama Portable Zip
-ARG IPEXLLM_PORTABLE_ZIP_FILENAME=ollama-ipex-llm-2.2.0-ubuntu.tgz
-RUN cd / && \
-    wget https://github.com/intel/ipex-llm/releases/download/v2.2.0/${IPEXLLM_PORTABLE_ZIP_FILENAME} && \
-    tar xvf ${IPEXLLM_PORTABLE_ZIP_FILENAME} --strip-components=1 -C / && \
-    rm ${IPEXLLM_PORTABLE_ZIP_FILENAME}
+# Or if you specifically need IPEX-LLM, use the correct filename:
+# RUN wget https://github.com/intel/ipex-llm/releases/download/v2.2.0/llama-cpp-ipex-llm-2.2.0-ubuntu-core.tgz && \
+#     tar xvf llama-cpp-ipex-llm-2.2.0-ubuntu-core.tgz --strip-components=1 -C / && \
+#     rm llama-cpp-ipex-llm-2.2.0-ubuntu-core.tgz
 
 ENV OLLAMA_HOST=0.0.0.0:11434
 
-# Create the missing start script
+# Create start script
 RUN echo '#!/bin/bash' > /start-ollama.sh && \
-    echo 'echo "Starting Ollama with Intel IPEX-LLM support..."' >> /start-ollama.sh && \
+    echo 'echo "Starting Ollama with Intel GPU support..."' >> /start-ollama.sh && \
     echo 'ollama serve' >> /start-ollama.sh && \
     chmod +x /start-ollama.sh
 
