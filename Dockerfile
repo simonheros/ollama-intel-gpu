@@ -43,7 +43,7 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*
 
 # -----------------------------------------------------------------------------
-# 2. Intel GPU Runtime (APT repo + fallback)
+# Intel GPU Drivers, Level Zero, and OpenCL Runtime
 # -----------------------------------------------------------------------------
 RUN set -eux; \
     echo "🔧 Adding Intel GPU repo (using Jammy for compatibility)"; \
@@ -54,6 +54,7 @@ RUN set -eux; \
         > /etc/apt/sources.list.d/intel-graphics.list; \
     apt-get update || true; \
     \
+    echo "📦 Attempting to install from Intel APT repo..."; \
     if ! apt-get install -y --no-install-recommends \
         intel-opencl-icd \
         intel-level-zero-gpu \
@@ -65,7 +66,7 @@ RUN set -eux; \
         echo "⚠️ Intel repo failed — falling back to manual .deb install"; \
         mkdir -p /tmp/gpu && cd /tmp/gpu; \
         \
-        # Download a *consistent* matching stack (Compute Runtime 25.40)
+        echo "⬇️ Downloading Intel GPU runtime DEBs (Compute Runtime 25.40 stack)"; \
         wget -q https://github.com/oneapi-src/level-zero/releases/download/v1.25.2/level-zero_1.25.2+u24.04_amd64.deb; \
         wget -q https://github.com/intel/intel-graphics-compiler/releases/download/v2.20.3/intel-igc-core-2_2.20.3+19972_amd64.deb; \
         wget -q https://github.com/intel/intel-graphics-compiler/releases/download/v2.20.3/intel-igc-opencl-2_2.20.3+19972_amd64.deb; \
@@ -74,12 +75,18 @@ RUN set -eux; \
         wget -q https://github.com/intel/compute-runtime/releases/download/25.40.35563.4/libigdgmm12_22.8.2_amd64.deb; \
         wget -q https://github.com/intel/compute-runtime/releases/download/25.40.35563.4/libze-intel-gpu1_25.40.35563.4-0_amd64.deb; \
         \
-        # Install without conflict
+        echo "🧩 Installing downloaded packages..."; \
         dpkg -i *.deb || apt-get -fy install; \
         dpkg -i *.deb; \
         cd / && rm -rf /tmp/gpu; \
     fi; \
+    \
+    echo "🧾 Installed GPU packages:"; \
+    dpkg -l | grep -E 'intel-|level-zero|igdgmm|ze-intel' || true; \
+    \
+    echo "✅ Intel GPU stack installation complete."; \
     rm -rf /var/lib/apt/lists/*
+
 
 
 # -----------------------------------------------------------------------------
