@@ -25,45 +25,25 @@ RUN mkdir -p /tmp/gpu && cd /tmp/gpu && \
     apt install -y ./*.deb && \
     cd / && rm -rf /tmp/gpu
 
-# Download and extract IPEX-LLM with proper structure inspection
+# Download IPEX-LLM and extract with better debugging
 RUN cd /tmp && \
-    for filename in \
-        "ollama-ipex-llm-2.2.0-ubuntu.tgz" \
-        "ollama-ipex-llm-cpu-2.2.0-ubuntu.tgz" \
-        "llama-cpp-ipex-llm-2.2.0-ubuntu-core.tgz"; do \
-        echo "Trying to download: $filename" && \
-        if wget -q --tries=2 --timeout=30 "https://github.com/intel/ipex-llm/releases/download/v2.2.0/${filename}"; then \
-            echo "Successfully downloaded: $filename" && \
-            echo "Contents of the archive:" && \
-            tar -tzf "${filename}" | head -20 && \
-            echo "Extracting to /tmp/ipex-llm..." && \
-            mkdir -p /tmp/ipex-llm && \
-            tar xzf "${filename}" -C /tmp/ipex-llm && \
-            echo "Looking for ollama binary..." && \
-            find /tmp/ipex-llm -name "ollama" -type f && \
-            echo "Moving contents to root..." && \
-            cp -r /tmp/ipex-llm/* / || cp -r /tmp/ipex-llm/.* / 2>/dev/null || true && \
-            rm -f "${filename}" && \
-            rm -rf /tmp/ipex-llm && \
-            echo "Successfully extracted: $filename" && \
-            break; \
-        else \
-            echo "Failed to download: $filename" && \
-            rm -f "${filename}"; \
-        fi; \
-    done
+    echo "Downloading IPEX-LLM..." && \
+    wget -q --tries=3 --timeout=60 https://github.com/intel/ipex-llm/releases/download/v2.2.0/llama-cpp-ipex-llm-2.2.0-ubuntu-core.tgz && \
+    echo "Extracting archive..." && \
+    tar -tzf llama-cpp-ipex-llm-2.2.0-ubuntu-core.tgz && \
+    echo "Full extraction..." && \
+    tar xzf llama-cpp-ipex-llm-2.2.0-ubuntu-core.tgz -C / && \
+    rm -f llama-cpp-ipex-llm-2.2.0-ubuntu-core.tgz && \
+    echo "Looking for ollama binary..." && \
+    find / -name "ollama" -type f 2>/dev/null
 
-# Verify ollama binary exists and set permissions
-RUN find / -name "ollama" -type f 2>/dev/null | head -5 && \
-    ls -la /usr/local/bin/ollama 2>/dev/null || ls -la /bin/ollama 2>/dev/null || ls -la /usr/bin/ollama 2>/dev/null || echo "Ollama binary not found in standard locations"
-
-# Add possible binary locations to PATH
-ENV PATH="/usr/local/bin:/bin:/usr/bin:/app:${PATH}"
+# Set PATH to include common binary locations
+ENV PATH="/usr/local/bin:/bin:/usr/bin:/app:/ollama:${PATH}"
 
 ENV OLLAMA_HOST=0.0.0.0:11434
 
-# Create start script that finds the ollama binary
-RUN printf '#!/bin/bash\necho "Starting Ollama with IPEX-LLM..."\necho "OLLAMA_HOST: $OLLAMA_HOST"\necho "Looking for ollama binary..."\nwhich ollama || find / -name "ollama" -type f 2>/dev/null | head -5\necho "Starting Ollama..."\nollama serve\n' > /start-ollama.sh && \
+# Create a more robust start script
+RUN printf '#!/bin/bash\nset -e\necho "Starting Ollama with IPEX-LLM..."\necho "OLLAMA_HOST: $OLLAMA_HOST"\n\n# Find ollama binary\nOLLAMA_BIN=$(find / -name "ollama" -type f 2>/dev/null | head -1)\nif [ -z "$OLLAMA_BIN" ]; then\n    echo "Error: ollama binary not found!"\n    echo "Searching for executable files..."\n    find / -type f -executable -name "*ollama*" 2>/dev/null | head -10\n    exit 1\nfi\n\necho "Found ollama at: $OLLAMA_BIN"\necho "Starting Ollama server..."\nexec "$OLLAMA_BIN" serve\n' > /start-ollama.sh && \
     chmod +x /start-ollama.sh
 
 ENTRYPOINT ["/bin/bash", "/start-ollama.sh"]
