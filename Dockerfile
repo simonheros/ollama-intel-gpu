@@ -4,15 +4,15 @@ ENV TZ=America/Los_Angeles
 
 # Update and install all necessary packages
 RUN apt update && \
-    apt install --no-install-recommends -q -y \
+    apt install -y \
     software-properties-common \
     ca-certificates \
     wget \
     curl \
     git \
     build-essential \
-    ocl-icd-libopencl1 \
-    clinfo && \
+    level-zero-dev \
+    level-zero \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -28,15 +28,12 @@ RUN mkdir -p /tmp/gpu && cd /tmp/gpu && \
     apt install -y ./*.deb && \
     cd / && rm -rf /tmp/gpu
 
-# Install Intel GPU drivers
+# Install Intel GPU drivers with Level Zero support
 RUN wget -q -O - https://repositories.intel.com/gpu/intel-graphics.key | gpg --dearmor > /usr/share/keyrings/intel-graphics.gpg && \
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu jammy client" > /etc/apt/sources.list.d/intel-gpu.list && \
     apt update && \
-    apt install -y intel-opencl-icd intel-level-zero-gpu level-zero level-zero-devel ocl-icd-libopencl1 clinfo && \
+    apt install -y intel-level-zero-gpu level-zero level-zero-devel intel-opencl-icd && \
     apt clean && rm -rf /var/lib/apt/lists/*
-
-# Test OpenCL installation
-RUN clinfo | head -20
 
 # Install Python and basic dependencies first
 RUN apt update && \
@@ -44,21 +41,26 @@ RUN apt update && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 d
-# Download and install the IPEX-LLM Ollama binary
+# Install IPEX-LLM Ollama from official Intel release
 RUN cd /tmp && \
-    wget -q https://github.com/ipex-llm/ipex-llm/releases/download/v2.3.0-nightly/ollama-ipex-llm-2.3.0b20250725-ubuntu.tgz && \
-    tar xzf ollama-ipex-llm-2.3.0b20250725-ubuntu.tgz --strip-components=1 -C / && \
-    rm -f ollama-ipex-llm-2.3.0b20250725-ubuntu.tgz
+    wget -q https://github.com/intel/ipex-llm/releases/download/v2.2.0/ollama-ipex-llm-2.2.0-ubuntu.tgz && \
+    tar xzf ollama-ipex-llm-2.2.0-ubuntu.tgz --strip-components=1 -C / && \
+    rm -f ollama-ipex-llm-2.2.0-ubuntu.tgz
     
 # Verify Ollama installation and set permissions
 RUN chmod +x /usr/local/bin/ollama && \
     mkdir -p /root/.ollama
 
 # Create startup script
-RUN printf '#!/bin/bash\necho "=== IPEX-LLM Ollama v2.3.0 Nightly === "\necho "Ollama version: $(ollama --version)"\necho ""\necho "GPU Devices:"\nls -la /dev/dri/ 2>/dev/null || echo "No DRI devices"\necho ""\necho "OpenCL Devices:"\nclinfo 2>/dev/null | grep "Device Name" || echo "OpenCL check"\necho ""\necho "Starting IPEX-LLM Ollama server..."\nexec ollama serve\n' > /start-ollama.sh && \
+RUN printf '#!/bin/bash\necho "=== Intel IPEX-LLM Ollama with oneAPI/Level Zero === "\necho "Using pure Level Zero backend (no OpenCL)"\necho ""\necho "Environment:"\necho "  SYCL_DEVICE_FILTER: $SYCL_DEVICE_FILTER"\necho "  ONEAPI_DEVICE_SELECTOR: $ONEAPI_DEVICE_SELECTOR"\necho ""\necho "GPU Devices:"\nls -la /dev/dri/ 2>/dev/null || echo "No DRI devices"\necho ""\necho "Starting Ollama with Level Zero acceleration..."\nexec ollama serve\n' > /start-ollama.sh && \
     chmod +x /start-ollama.sh
+
 
 # Set environment variables
 ENV OLLAMA_HOST=0.0.0.0:11434
+ENV SYCL_DEVICE_FILTER=level_zero:gpu
+ENV ONEAPI_DEVICE_SELECTOR=level_zero:gpu
+ENV ZES_ENABLE_SYSMAN=1
+
 
 ENTRYPOINT ["/bin/bash", "/start-ollama.sh"]
