@@ -2,17 +2,16 @@ FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=America/Los_Angeles
 
-# Update and install all necessary packages
+# Install base system with only Level Zero packages
 RUN apt update && \
     apt install -y \
     software-properties-common \
     ca-certificates \
     wget \
     curl \
-    git \
-    build-essential \
+    # Level Zero packages only (no OpenCL)
     level-zero-dev \
-    level-zero \
+    level-zero && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 
