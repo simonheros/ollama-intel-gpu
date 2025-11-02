@@ -27,14 +27,14 @@ RUN mkdir -p /tmp/gpu && cd /tmp/gpu && \
     apt install -y ./*.deb && \
     cd / && rm -rf /tmp/gpu
 
-# Install Ollama using the official method
-RUN curl -fsSL https://ollama.ai/install.sh | sh
-
 # Install Python and basic dependencies first
 RUN apt update && \
     apt install -y python3 python3-pip python3-venv && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
+
+# Install Ollama using the official method
+RUN curl -fsSL https://ollama.ai/install.sh | sh
 
 # Set environment variables
 ENV OLLAMA_HOST=0.0.0.0:11434
