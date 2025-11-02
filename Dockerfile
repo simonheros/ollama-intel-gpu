@@ -53,6 +53,7 @@ RUN set -eux; \
         https://repositories.intel.com/graphics/ubuntu jammy arc" \
         > /etc/apt/sources.list.d/intel-graphics.list; \
     apt-get update || true; \
+    \
     if ! apt-get install -y --no-install-recommends \
         intel-opencl-icd \
         intel-level-zero-gpu \
@@ -63,18 +64,23 @@ RUN set -eux; \
         intel-ocloc; then \
         echo "⚠️ Intel repo failed — falling back to manual .deb install"; \
         mkdir -p /tmp/gpu && cd /tmp/gpu; \
+        \
+        # Download a *consistent* matching stack (Compute Runtime 25.40)
         wget -q https://github.com/oneapi-src/level-zero/releases/download/v1.25.2/level-zero_1.25.2+u24.04_amd64.deb; \
         wget -q https://github.com/intel/intel-graphics-compiler/releases/download/v2.20.3/intel-igc-core-2_2.20.3+19972_amd64.deb; \
         wget -q https://github.com/intel/intel-graphics-compiler/releases/download/v2.20.3/intel-igc-opencl-2_2.20.3+19972_amd64.deb; \
-        wget -q https://github.com/intel/compute-runtime/releases/download/25.09.32961.7/intel-level-zero-gpu_1.6.32961.7_amd64.deb; \
         wget -q https://github.com/intel/compute-runtime/releases/download/25.40.35563.4/intel-ocloc_25.40.35563.4-0_amd64.deb; \
         wget -q https://github.com/intel/compute-runtime/releases/download/25.40.35563.4/intel-opencl-icd_25.40.35563.4-0_amd64.deb; \
         wget -q https://github.com/intel/compute-runtime/releases/download/25.40.35563.4/libigdgmm12_22.8.2_amd64.deb; \
         wget -q https://github.com/intel/compute-runtime/releases/download/25.40.35563.4/libze-intel-gpu1_25.40.35563.4-0_amd64.deb; \
-        dpkg -i *.deb || true; apt-get install -fy; dpkg -i *.deb; \
+        \
+        # Install without conflict
+        dpkg -i *.deb || apt-get -fy install; \
+        dpkg -i *.deb; \
         cd / && rm -rf /tmp/gpu; \
     fi; \
     rm -rf /var/lib/apt/lists/*
+
 
 # -----------------------------------------------------------------------------
 # 3. IPEX-LLM portable Ollama
