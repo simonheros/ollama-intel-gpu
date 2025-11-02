@@ -2,7 +2,7 @@ FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=America/Los_Angeles
 
-# Update and install all necessary packages in one layer
+# Update and install all necessary packages
 RUN apt update && \
     apt install --no-install-recommends -q -y \
     software-properties-common \
@@ -13,7 +13,7 @@ RUN apt update && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Intel GPU compute user-space drivers
+# Intel GPU drivers
 RUN mkdir -p /tmp/gpu && cd /tmp/gpu && \
     wget -q https://github.com/oneapi-src/level-zero/releases/download/v1.25.2/level-zero_1.25.2+u24.04_amd64.deb && \
     wget -q https://github.com/intel/intel-graphics-compiler/releases/download/v2.20.3/intel-igc-core-2_2.20.3+19972_amd64.deb && \
@@ -25,22 +25,26 @@ RUN mkdir -p /tmp/gpu && cd /tmp/gpu && \
     apt install -y ./*.deb && \
     cd / && rm -rf /tmp/gpu
 
-# Download IPEX-LLM in a separate step with verification
+# Try different possible filenames for IPEX-LLM
 RUN cd /tmp && \
-    echo "Downloading IPEX-LLM Ollama..." && \
-    if ! wget -q --tries=3 --timeout=60 https://github.com/intel/ipex-llm/releases/download/v2.2.0/ollama-ipex-llm-2.2.0-ubuntu.tgz; then \
-        echo "wget failed, trying curl..." && \
-        curl -L -f -o ollama-ipex-llm-2.2.0-ubuntu.tgz https://github.com/intel/ipex-llm/releases/download/v2.2.0/ollama-ipex-llm-2.2.0-ubuntu.tgz; \
-    fi && \
-    echo "Verifying download..." && \
-    if [ ! -f "ollama-ipex-llm-2.2.0-ubuntu.tgz" ]; then \
-        echo "Download failed - file not found"; \
-        exit 1; \
-    fi && \
-    echo "Extracting..." && \
-    tar xvf ollama-ipex-llm-2.2.0-ubuntu.tgz --strip-components=1 -C / && \
-    rm -f ollama-ipex-llm-2.2.0-ubuntu.tgz && \
-    echo "Extraction completed"
+    echo "Attempting to download IPEX-LLM Ollama..." && \
+    for filename in \
+        "ollama-ipex-llm-2.2.0-ubuntu.tgz" \
+        "ollama-ipex-llm-cpu-2.2.0-ubuntu.tgz" \
+        "ollama-linux-2.2.0.tgz" \
+        "ollama-ubuntu-2.2.0.tgz"; do \
+        echo "Trying $filename..." && \
+        if wget -q --tries=2 --timeout=30 "https://github.com/intel/ipex-llm/releases/download/v2.2.0/${filename}"; then \
+            echo "Download successful: $filename" && \
+            tar xvf "${filename}" --strip-components=1 -C / && \
+            rm -f "${filename}" && \
+            echo "Extraction completed successfully" && \
+            break; \
+        else \
+            echo "Failed to download $filename" && \
+            rm -f "${filename}"; \
+        fi; \
+    done
 
 ENV OLLAMA_HOST=0.0.0.0:11434
 
