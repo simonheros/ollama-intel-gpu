@@ -1,38 +1,15 @@
-FROM ubuntu:24.04
-
-# Noninteractive mode (no prompts)
-ENV DEBIAN_FRONTEND=noninteractive \
-    TZ=America/Los_Angeles \
-    OLLAMA_HOST=0.0.0.0:11434
-
 # -----------------------------------------------------------------------------
-# 1. Base system setup
-# -----------------------------------------------------------------------------
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        ca-certificates \
-        wget \
-        software-properties-common \
-        ocl-icd-libopencl1 \
-    && rm -rf /var/lib/apt/lists/*
-
-# -----------------------------------------------------------------------------
-# 2. Install Intel GPU Runtime (from APT repo + fallback .deb downloads)
+# 3. Install Intel GPU Runtime (with repo + fallback)
 # -----------------------------------------------------------------------------
 RUN set -eux; \
-    # -------------------------------------------------------------------------
-    # Add Intel GPG key and APT repository
-    # -------------------------------------------------------------------------
+    # Add Intel GPG key and APT repository (use Jammy repo for 24.04 compatibility)
     wget -qO - https://repositories.intel.com/graphics/intel-graphics.key | \
         gpg --dearmor -o /usr/share/keyrings/intel-graphics.gpg; \
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] \
-        https://repositories.intel.com/graphics/ubuntu noble arc" \
+        https://repositories.intel.com/graphics/ubuntu jammy arc" \
         > /etc/apt/sources.list.d/intel-graphics.list; \
     \
-    # -------------------------------------------------------------------------
-    # Attempt to install via Intel repository first
-    # -------------------------------------------------------------------------
-    apt-get update && \
+    apt-get update || true; \
     if ! apt-get install -y --no-install-recommends \
         intel-opencl-icd \
         intel-level-zero-gpu \
@@ -41,8 +18,7 @@ RUN set -eux; \
         intel-igc-opencl \
         libigdgmm12 \
         intel-ocloc; then \
-        echo "⚠️ Intel repo installation failed — falling back to manual .deb install."; \
-        \
+        echo "⚠️ Intel APT install failed — falling back to manual GPU driver installation."; \
         mkdir -p /tmp/gpu && cd /tmp/gpu; \
         wget -q https://github.com/oneapi-src/level-zero/releases/download/v1.25.2/level-zero_1.25.2+u24.04_amd64.deb; \
         wget -q https://github.com/intel/intel-graphics-compiler/releases/download/v2.20.3/intel-igc-core-2_2.20.3+19972_amd64.deb; \
@@ -57,25 +33,15 @@ RUN set -eux; \
         dpkg -i *.deb; \
         rm -rf /tmp/gpu; \
     fi; \
-    \
-    # -------------------------------------------------------------------------
-    # Cleanup
-    # -------------------------------------------------------------------------
     rm -rf /var/lib/apt/lists/*
 
-
 # -----------------------------------------------------------------------------
-# 3. Install IPEX-LLM Ollama portable package
+# 4. Install IPEX-LLM Ollama portable package (corrected file name)
 # -----------------------------------------------------------------------------
-ARG IPEXLLM_PORTABLE_ZIP_FILENAME=ollama-ipex-llm-2.2.0-ubuntu.tgz
+ARG IPEXLLM_PORTABLE_ZIP_FILENAME=llama-cpp-ipex-llm-2.2.0-ubuntu-core.tgz
 
 RUN cd / && \
-    wget -q https://github.com/intel/ipex-llm/releases/download/v2.2.0/${IPEXLLM_PORTABLE_ZIP_FILENAME} && \
+    wget -q https://github.com/intel/ipex-llm/releases/download/v2.2.0/${IPEXLLM_PORTABLE_ZIP_FILENAME} || \
+      (echo "❌ Failed to download ${IPEXLLM_PORTABLE_ZIP_FILENAME}"; exit 1); \
     tar xvf ${IPEXLLM_PORTABLE_ZIP_FILENAME} --strip-components=1 -C / && \
     rm ${IPEXLLM_PORTABLE_ZIP_FILENAME}
-
-# -----------------------------------------------------------------------------
-# 4. Runtime entrypoint
-# -----------------------------------------------------------------------------
-EXPOSE 11434
-ENTRYPOINT ["/bin/bash", "/start-ollama.sh"]
