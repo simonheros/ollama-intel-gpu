@@ -29,9 +29,9 @@ RUN mkdir -p /tmp/gpu && cd /tmp/gpu && \
 
 # Install Intel GPU drivers with Level Zero support
 RUN wget -q -O - https://repositories.intel.com/gpu/intel-graphics.key | gpg --dearmor > /usr/share/keyrings/intel-graphics.gpg && \
-    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu jammy client" > /etc/apt/sources.list.d/intel-gpu.list && \
+    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu jammy main" > /etc/apt/sources.list.d/intel-gpu.list && \
     apt update && \
-    apt install -y intel-level-zero-gpu level-zero level-zero-devel intel-opencl-icd && \
+    apt install -y intel-level-zero-gpu level-zero level-zero-devel && \
     apt clean && rm -rf /var/lib/apt/lists/*
 
 # Install Python and basic dependencies first
@@ -39,7 +39,7 @@ RUN apt update && \
     apt install -y python3 python3-pip python3-venv && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
-d
+
 # Install IPEX-LLM Ollama from official Intel release
 RUN cd /tmp && \
     wget -q https://github.com/intel/ipex-llm/releases/download/v2.2.0/ollama-ipex-llm-2.2.0-ubuntu.tgz && \
@@ -50,16 +50,14 @@ RUN cd /tmp && \
 RUN chmod +x /usr/local/bin/ollama && \
     mkdir -p /root/.ollama
 
-# Create startup script
-RUN printf '#!/bin/bash\necho "=== Intel IPEX-LLM Ollama with oneAPI/Level Zero === "\necho "Using pure Level Zero backend (no OpenCL)"\necho ""\necho "Environment:"\necho "  SYCL_DEVICE_FILTER: $SYCL_DEVICE_FILTER"\necho "  ONEAPI_DEVICE_SELECTOR: $ONEAPI_DEVICE_SELECTOR"\necho ""\necho "GPU Devices:"\nls -la /dev/dri/ 2>/dev/null || echo "No DRI devices"\necho ""\necho "Starting Ollama with Level Zero acceleration..."\nexec ollama serve\n' > /start-ollama.sh && \
-    chmod +x /start-ollama.sh
-
-
 # Set environment variables
 ENV OLLAMA_HOST=0.0.0.0:11434
 ENV SYCL_DEVICE_FILTER=level_zero:gpu
 ENV ONEAPI_DEVICE_SELECTOR=level_zero:gpu
 ENV ZES_ENABLE_SYSMAN=1
 
+# Create startup script
+RUN printf '#!/bin/bash\necho "=== Intel IPEX-LLM Ollama with oneAPI/Level Zero === "\necho "Using pure Level Zero backend (no OpenCL)"\necho ""\necho "Environment:"\necho "  SYCL_DEVICE_FILTER: $SYCL_DEVICE_FILTER"\necho "  ONEAPI_DEVICE_SELECTOR: $ONEAPI_DEVICE_SELECTOR"\necho ""\necho "GPU Devices:"\nls -la /dev/dri/ 2>/dev/null || echo "No DRI devices"\necho ""\necho "Starting Ollama with Level Zero acceleration..."\nexec ollama serve\n' > /start-ollama.sh && \
+    chmod +x /start-ollama.sh
 
 ENTRYPOINT ["/bin/bash", "/start-ollama.sh"]
