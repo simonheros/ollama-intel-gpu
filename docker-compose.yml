@@ -1,54 +1,119 @@
+version: "3.9"
+
 services:
   ollama-intel-gpu:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: ollama-intel-gpu
-    restart: always
+    restart: unless-stopped
+    privileged: true
+    shm_size: 16g
+    mem_limit: 100g
+    cpus: 12
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - "44"   # video
+      - "107"  # render
+    volumes:
+      - ollama-intel-gpu:/root/.ollama
+      - ./models:/models
+    environment:
+      # ==== Intel GPU / oneAPI ====
+      SYCL_DEVICE_FILTER: "level_zero:gpu"
+      ONEAPI_DEVICE_SELECTOR: "level_zero:gpu"
+      ZES_ENABLE_SYSMAN: "1"
+      SYCL_PI_LEVEL_ZERO_USE_MULTI_DEVICE_CONTEXT: "1"
+      SYCL_QUEUE_THREAD_POOL_SIZE: "16"
+
+      # ==== IPEX-LLM / PyTorch ====
+      IPEX_LLM_GPU_RUNTIME: "level_zero"
+      TORCH_DEVICE: "xpu"
+      OMP_NUM_THREADS: "16"
+      MKL_NUM_THREADS: "16"
+      KMP_AFFINITY: "granularity=fine,compact,1,0"
+
+      # ==== GPU Configuration ====
+      OLLAMA_GPUS: "2"
+      OLLAMA_MAX_VRAM: "32768"   # total 32 GB (2× 16 GB)
+      OLLAMA_FLASH_ATTENTION: "1"
+      OLLAMA_KEEP_ALIVE: "0"
+      OLLAMA_NUM_CPU: "32"
+      OLLAMA_HOST: "0.0.0.0"
+      OPENVINO_DEVICE: "GPU"
+      OPENVINO_LOG_LEVEL: "INFO"
+
+      # ==== Networking ====
+      OLLAMA_PORT: "11434"
+      START_PORT: "11434"
+      WORKERS_PER_GPU: "1"
+      PHYSICAL_CORES: "16"
+      CORES_PER_WORKER: "4"
+
+    ports:
+      - "11434:11434"
+      - "11435-11440:11435-11440"   # optional: multi-GPU workers
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:11434/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # --------------------------------------------------------------------------
+  # OpenVINO Model Server (OVMS) for high-throughput inference serving
+  # --------------------------------------------------------------------------
+  ovms:
+    image: openvino/model_server:latest
+    container_name: ovms
+    restart: unless-stopped
+    privileged: true
     devices:
       - /dev/dri:/dev/dri
     volumes:
-      - ollama-intel-gpu:/root/.ollama
+      - ./ovms_models:/models
+    command:
+      [
+        "--model_path", "/models",
+        "--port", "9000",
+        "--rest_port", "9001",
+        "--grpc_bind_address", "0.0.0.0",
+        "--rest_bind_address", "0.0.0.0",
+        "--nireq", "2",
+        "--device", "GPU",
+        "--plugin_config", "INFERENCE_PRECISION_HINT=bf16,PERFORMANCE_HINT=THROUGHPUT"
+      ]
+    ports:
+      - "9000:9000"
+      - "9001:9001"
     environment:
-      # Intel GPU configuration - CRITICAL
+      - OPENVINO_LOG_LEVEL=INFO
       - SYCL_DEVICE_FILTER=level_zero:gpu
       - ONEAPI_DEVICE_SELECTOR=level_zero:gpu
       - ZES_ENABLE_SYSMAN=1
+    depends_on:
+      - ollama-intel-gpu
 
-      # IPEX-LLM settings
-      - IPEX_LLM_GPU_RUNTIME=level_zero
-  
-      # GPU settings
-      - OLLAMA_GPUS=2
-      - OLLAMA_MAX_VRAM=32768  # 32GB total VRAM (2x16GB)
-      
-      # Performance tuning
-      - OLLAMA_FLASH_ATTENTION=1
-      - OLLAMA_NUM_CPU=32
-      - OLLAMA_KEEP_ALIVE=0
-      - OLLAMA_HOST=0.0.0.0
-    shm_size: 16g
-    mem_limit: 80g
-    privileged: true
-    group_add:
-      - "44"  # video group
-      - "107" # render group
-    
+  # --------------------------------------------------------------------------
+  # OpenWebUI (front-end for Ollama)
+  # --------------------------------------------------------------------------
   ollama-webui:
-    image: ghcr.io/open-webui/open-webui
+    image: ghcr.io/open-webui/open-webui:latest
     container_name: ollama-webui
-    volumes:
-      - ollama-webui:/app/backend/data
+    restart: unless-stopped
     depends_on:
       - ollama-intel-gpu
     ports:
-      - ${OLLAMA_WEBUI_PORT-3000}:8080
+      - "${OLLAMA_WEBUI_PORT-3000}:8080"
     environment:
       - OLLAMA_BASE_URL=http://ollama-intel-gpu:11434
+    volumes:
+      - ollama-webui:/app/backend/data
     extra_hosts:
       - host.docker.internal:host-gateway
-    restart: unless-stopped
 
 volumes:
-  ollama-webui: {}
-  ollama-intel-gpu: {}
+  ollama-intel-gpu:
+  ollama-webui:
