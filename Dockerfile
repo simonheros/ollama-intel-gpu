@@ -25,45 +25,30 @@ RUN mkdir -p /tmp/gpu && cd /tmp/gpu && \
     apt install -y ./*.deb && \
     cd / && rm -rf /tmp/gpu
 
-# First, let's check what files are available in the IPEX-LLM release
-RUN echo "Checking available IPEX-LLM releases..." && \
-    curl -s https://api.github.com/repos/intel/ipex-llm/releases/tags/v2.2.0 | grep -o '"name": "[^"]*"' | cut -d'"' -f4 | grep -E "(ollama|llama)" || true
-
-# Download the correct IPEX-LLM file - based on common naming patterns
+# Download and install the actual available IPEX-LLM files from v2.2.0
 RUN cd /tmp && \
-    echo "Trying different IPEX-LLM package names..." && \
-    for package in \
-        "ipex-llm-ollama-2.2.0-linux-x86_64.tgz" \
-        "ollama-ipex-llm-2.2.0-linux-x86_64.tgz" \
-        "ipex-llm-ollama-v2.2.0-linux-x86_64.tgz" \
-        "ollama-linux-x86_64-2.2.0.tgz" \
-        "ipex-llm-ollama-ubuntu-2.2.0.tgz"; do \
-        echo "Attempting to download: $package" && \
-        if wget -q --tries=2 --timeout=30 "https://github.com/intel/ipex-llm/releases/download/v2.2.0/${package}"; then \
-            echo "Successfully downloaded: $package" && \
-            echo "Archive contents:" && \
-            tar -tzf "$package" | head -20 && \
-            echo "Extracting..." && \
-            tar xzf "$package" -C / && \
-            rm -f "$package" && \
-            echo "Extraction completed for: $package" && \
-            break; \
-        fi; \
-    done
+    echo "Downloading IPEX-LLM core library..." && \
+    wget -q https://github.com/ipex-llm/ipex-llm/releases/download/v2.2.0/ipex_llm-2.2.0+cpu-cp311-cp311-manylinux2014_x86_64.whl && \
+    echo "Downloading example applications..." && \
+    wget -q https://github.com/ipex-llm/ipex-llm/releases/download/v2.2.0/ipex_llm_examples-2.2.0-py3-none-any.whl
 
-# Alternative: If the above fails, try to install Ollama normally and then add IPEX-LLM support
-RUN if [ ! -f "/usr/local/bin/ollama" ] && [ ! -f "/bin/ollama" ] && [ ! -f "/usr/bin/ollama" ]; then \
-    echo "IPEX-LLM packages not found, installing standard Ollama..." && \
-    curl -fsSL https://ollama.ai/install.sh | sh; \
-    fi
+# Install Python and the IPEX-LLM wheels
+RUN apt update && apt install -y python3 python3-pip && \
+    pip3 install /tmp/ipex_llm-2.2.0+cpu-cp311-cp311-manylinux2014_x86_64.whl && \
+    pip3 install /tmp/ipex_llm_examples-2.2.0-py3-none-any.whl && \
+    rm -f /tmp/*.whl && \
+    apt clean && \
+    rm -rf /var/lib/apt/lists/*
 
-# Set PATH to include common binary locations
-ENV PATH="/usr/local/bin:/bin:/usr/bin:/app:${PATH}"
+# Install Ollama using the official method
+RUN curl -fsSL https://ollama.ai/install.sh | sh
 
+# Set environment variables for IPEX-LLM
 ENV OLLAMA_HOST=0.0.0.0:11434
+ENV IPEX_LLM_GPU_RUNTIME=opencl
 
-# Create a robust start script that works with or without IPEX-LLM
-RUN printf '#!/bin/bash\nset -e\necho "Starting Ollama..."\necho "OLLAMA_HOST: $OLLAMA_HOST"\n\n# Find ollama binary\nOLLAMA_BIN=$(which ollama 2>/dev/null || find / -name "ollama" -type f 2>/dev/null | head -1)\nif [ -z "$OLLAMA_BIN" ]; then\n    echo "Error: ollama binary not found!"\n    echo "Available binaries:"\n    find / -type f -executable 2>/dev/null | grep -i ollama | head -10 || echo "No ollama-related executables found"\n    exit 1\nfi\n\necho "Found ollama at: $OLLAMA_BIN"\necho "Starting Ollama server..."\nexec "$OLLAMA_BIN" serve\n' > /start-ollama.sh && \
+# Create a start script that uses IPEX-LLM with Ollama
+RUN printf '#!/bin/bash\necho "Starting Ollama with IPEX-LLM GPU acceleration..."\necho "OLLAMA_HOST: $OLLAMA_HOST"\necho "IPEX_LLM_GPU_RUNTIME: $IPEX_LLM_GPU_RUNTIME"\n\n# Check GPU availability\necho "Checking GPU devices..."\nls -la /dev/dri/ 2>/dev/null || echo "No DRI devices found"\n\n# Check OpenCL devices\necho "Checking OpenCL devices..."\nwhich clinfo && clinfo 2>/dev/null | head -20 || echo "clinfo not available"\n\necho "Starting Ollama server..."\nexec ollama serve\n' > /start-ollama.sh && \
     chmod +x /start-ollama.sh
 
 ENTRYPOINT ["/bin/bash", "/start-ollama.sh"]
