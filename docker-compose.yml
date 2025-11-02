@@ -11,9 +11,12 @@ services:
       - ollama-intel-gpu:/root/.ollama
     environment:
       # Intel GPU configuration - CRITICAL
-      - OLLAMA_GPU_DRIVER=opencl
-      - ONEAPI_DEVICE_SELECTOR=opencl:0
-      - OCL_ICD_FILENAMES=/usr/lib/x86_64-linux-gnu/intel-opencl/libigdrcl.so
+      - SYCL_DEVICE_FILTER=level_zero:gpu
+      - ONEAPI_DEVICE_SELECTOR=level_zero:gpu
+      - ZES_ENABLE_SYSMAN=1
+
+      # IPEX-LLM settings
+      - IPEX_LLM_GPU_RUNTIME=level_zero
   
       # GPU settings
       - OLLAMA_GPUS=2
