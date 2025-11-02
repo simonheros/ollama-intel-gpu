@@ -41,15 +41,4 @@ RUN cd /tmp && \
 
 ENV OLLAMA_HOST=0.0.0.0:11434
 
-# Ensure start script exists
-RUN if [ ! -f "/start-ollama.sh" ]; then \
-    cat > /start-ollama.sh << 'EOF'
-#!/bin/bash
-echo "Starting Ollama with IPEX-LLM..."
-echo "OLLAMA_HOST: $OLLAMA_HOST"
-ollama serve
-EOF
-    chmod +x /start-ollama.sh; \
-    fi
-
 ENTRYPOINT ["/bin/bash", "/start-ollama.sh"]
