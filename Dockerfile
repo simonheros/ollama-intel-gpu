@@ -1,7 +1,6 @@
 # ============================================================
 # Intel-Optimized Ollama + IPEX-LLM + OpenVINO + OVMS
-# Target: Unraid host with Arc A770 × 2 + AMD 5950X
-# Base: Intel OneAPI BaseKit 2025.3 (Ubuntu 22.04 – jammy)
+# Base: intel/oneapi-basekit:2025.3.0-0-devel-ubuntu22.04
 # ============================================================
 
 FROM intel/oneapi-basekit:2025.3.0-0-devel-ubuntu22.04
@@ -24,13 +23,13 @@ RUN set -eux; \
     apt-get update && \
     apt-get install -y --no-install-recommends \
         wget curl gnupg ca-certificates \
-        python3 python3-pip python3-venv python3-dev \
+        python3 python3-venv python3-pip python3-dev \
         git libglib2.0-0 libsm6 libxext6 libxrender-dev \
         ocl-icd-libopencl1 && \
     rm -rf /var/lib/apt/lists/*
 
 # ------------------------------------------------------------
-# Install Intel GPU runtime via .deb packages (stable 2025 builds)
+# Intel GPU runtime via .deb packages (stable Nov 2025)
 # ------------------------------------------------------------
 RUN set -eux; \
     mkdir -p /tmp/gpu && cd /tmp/gpu; \
@@ -44,25 +43,28 @@ RUN set -eux; \
     rm -rf /tmp/gpu
 
 # ------------------------------------------------------------
-# Python environment setup (PEP 668 safe)
+# Create isolated Python environment (PEP 668 safe)
 # ------------------------------------------------------------
 RUN set -eux; \
-    python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel --break-system-packages
+    python3 -m venv /opt/venv; \
+    . /opt/venv/bin/activate; \
+    pip install --no-cache-dir --upgrade pip setuptools wheel
+
+ENV PATH="/opt/venv/bin:$PATH"
 
 # ------------------------------------------------------------
 # Install PyTorch + IPEX (XPU build)
 # ------------------------------------------------------------
 RUN set -eux; \
-    python3 -m pip install --no-cache-dir --break-system-packages \
+    pip install --no-cache-dir \
       --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/xpu/us/ \
-      "torch==2.3.1" "torchvision==0.18.1" "intel-extension-for-pytorch==2.3.110+xpu"
+      torch==2.3.1 torchvision==0.18.1 intel-extension-for-pytorch==2.3.110+xpu
 
 # ------------------------------------------------------------
 # Install OpenVINO + OVMS
 # ------------------------------------------------------------
 RUN set -eux; \
-    python3 -m pip install --no-cache-dir --break-system-packages \
-        openvino==2024.3.0 openvino-dev==2024.3.0; \
+    pip install --no-cache-dir openvino==2024.3.0 openvino-dev==2024.3.0; \
     wget -q https://storage.openvinotoolkit.org/repositories/openvino-model-server/releases/2024/ovms_ubuntu22.tar.gz -O /tmp/ovms.tar.gz; \
     mkdir -p /opt/ovms && tar -xzf /tmp/ovms.tar.gz -C /opt/ovms --strip-components=1; \
     rm /tmp/ovms.tar.gz
