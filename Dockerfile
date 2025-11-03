@@ -1,5 +1,5 @@
 # ============================================================
-# Intel-Optimized Ollama + IPEX-LLM + OpenVINO + OVMS Container
+# Intel-Optimized Ollama + IPEX-LLM + OpenVINO + OVMS
 # Target: Unraid host with Arc A770 × 2 + AMD 5950X
 # Base: Intel OneAPI BaseKit 2025.3 (Ubuntu 22.04 – jammy)
 # ============================================================
@@ -18,7 +18,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     OLLAMA_KEEP_ALIVE=0
 
 # ------------------------------------------------------------
-# System setup and dependencies
+# System setup and base dependencies
 # ------------------------------------------------------------
 RUN set -eux; \
     apt-get update && \
@@ -30,37 +30,35 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*
 
 # ------------------------------------------------------------
-# Intel GPU runtime (using jammy repo – stable & signed)
+# Install Intel GPU runtime via .deb packages (stable 2025 builds)
 # ------------------------------------------------------------
 RUN set -eux; \
-    wget -qO - https://repositories.intel.com/graphics/intel-graphics.key | \
-        gpg --dearmor -o /usr/share/keyrings/intel-graphics.gpg; \
-    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] \
-        https://repositories.intel.com/graphics/ubuntu jammy arc" \
-        > /etc/apt/sources.list.d/intel-graphics.list; \
-    apt-get update && \
-    apt-get install -y --no-install-recommends \
-        intel-opencl-icd intel-level-zero-gpu level-zero \
-        intel-igc-core intel-igc-opencl libigdgmm12 intel-ocloc && \
-    rm -rf /var/lib/apt/lists/*
+    mkdir -p /tmp/gpu && cd /tmp/gpu; \
+    wget https://github.com/oneapi-src/level-zero/releases/download/v1.20.2/level-zero_1.20.2+u22.04_amd64.deb; \
+    wget https://github.com/intel/intel-graphics-compiler/releases/download/v2.8.3/intel-igc-core-2_2.8.3+18762_amd64.deb; \
+    wget https://github.com/intel/intel-graphics-compiler/releases/download/v2.8.3/intel-igc-opencl-2_2.8.3+18762_amd64.deb; \
+    wget https://github.com/intel/compute-runtime/releases/download/25.09.32961.7/intel-level-zero-gpu_1.6.32961.7_amd64.deb; \
+    wget https://github.com/intel/compute-runtime/releases/download/25.09.32961.7/intel-opencl-icd_25.09.32961.7_amd64.deb; \
+    wget https://github.com/intel/compute-runtime/releases/download/25.09.32961.7/libigdgmm12_22.6.0_amd64.deb; \
+    dpkg -i *.deb || apt-get -fy install; \
+    rm -rf /tmp/gpu
 
 # ------------------------------------------------------------
-# Python environment setup (PEP 668 workaround)
+# Python environment setup (PEP 668 safe)
 # ------------------------------------------------------------
 RUN set -eux; \
     python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel --break-system-packages
 
 # ------------------------------------------------------------
-# Install PyTorch + IPEX (XPU wheels)
+# Install PyTorch + IPEX (XPU build)
 # ------------------------------------------------------------
 RUN set -eux; \
-    echo "Installing PyTorch + IPEX for Intel GPUs..."; \
     python3 -m pip install --no-cache-dir --break-system-packages \
       --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/xpu/us/ \
       "torch==2.3.1" "torchvision==0.18.1" "intel-extension-for-pytorch==2.3.110+xpu"
 
 # ------------------------------------------------------------
-# Install OpenVINO + Model Server (OVMS)
+# Install OpenVINO + OVMS
 # ------------------------------------------------------------
 RUN set -eux; \
     python3 -m pip install --no-cache-dir --break-system-packages \
@@ -70,7 +68,7 @@ RUN set -eux; \
     rm /tmp/ovms.tar.gz
 
 # ------------------------------------------------------------
-# Install IPEX-LLM runtime (Ollama portable)
+# Install IPEX-LLM Ollama portable runtime
 # ------------------------------------------------------------
 ARG IPEXLLM_PORTABLE_ZIP_FILENAME=ollama-ipex-llm-2.2.0-ubuntu.tgz
 RUN set -eux; \
@@ -87,12 +85,6 @@ ENV OMP_NUM_THREADS=32 \
     KMP_AFFINITY=granularity=fine,compact,1,0 \
     MALLOC_ARENA_MAX=1
 
-# ------------------------------------------------------------
-# Expose ports
-# ------------------------------------------------------------
 EXPOSE 11434 9000
 
-# ------------------------------------------------------------
-# Entrypoint
-# ------------------------------------------------------------
 ENTRYPOINT ["/bin/bash", "/start-ollama.sh"]
