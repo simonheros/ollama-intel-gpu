@@ -48,12 +48,14 @@ RUN set -eux; \
         torchaudio==2.3.1+cpu \
         --index-url https://download.pytorch.org/whl/cpu && \
     \
-    # Then Intel-specific optimizations
+    # Then Intel-specific optimizations (correct version)
     pip install --no-cache-dir \
-        intel-extension-for-pytorch==2.3.1+xpu \
+        intel-extension-for-pytorch==2.3.0 \
         ipex-llm==2.2.0 \
-        openvino==2024.3.0 openvino-dev==2024.3.0 \
-        numpy==1.26.4 requests==2.32.3
+        openvino==2024.3.0 \
+        openvino-dev==2024.3.0 \
+        numpy==1.26.4 \
+        requests==2.32.3
 
 # ------------------------------------------------------------
 # 4. Install OpenVINO Model Server (OVMS)
