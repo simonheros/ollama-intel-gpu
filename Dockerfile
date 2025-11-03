@@ -1,92 +1,60 @@
 # ============================================================
-# Intel-Optimized Ollama + IPEX-LLM + OpenVINO + OVMS
-# Base: intel/oneapi-basekit:2025.3.0-0-devel-ubuntu22.04
+#   Intel OneAPI + OpenVINO + GPU Runtime + OVMS Base Image
 # ============================================================
-
 FROM intel/oneapi-basekit:2025.3.0-0-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
-    TZ=America/Los_Angeles \
-    OLLAMA_HOST=0.0.0.0:11434 \
-    SYCL_DEVICE_FILTER=level_zero:gpu \
-    ONEAPI_DEVICE_SELECTOR=level_zero:gpu \
-    ZES_ENABLE_SYSMAN=1 \
-    IPEX_LLM_GPU_RUNTIME=level_zero \
-    OLLAMA_FLASH_ATTENTION=1 \
-    OLLAMA_NUM_CPU=32 \
-    OLLAMA_KEEP_ALIVE=0
+    TZ=Etc/UTC \
+    LC_ALL=C.UTF-8 \
+    LANG=C.UTF-8
 
 # ------------------------------------------------------------
-# System setup and base dependencies
+# System dependencies and Intel GPU runtime setup
 # ------------------------------------------------------------
 RUN set -eux; \
     apt-get update && \
     apt-get install -y --no-install-recommends \
-        wget curl gnupg ca-certificates \
-        python3 python3-venv python3-pip python3-dev \
-        git libglib2.0-0 libsm6 libxext6 libxrender-dev \
-        ocl-icd-libopencl1 && \
+        wget curl gnupg2 ca-certificates apt-transport-https \
+        software-properties-common lsb-release build-essential \
+        python3 python3-pip python3-venv python3-dev git vim && \
     rm -rf /var/lib/apt/lists/*
 
 # ------------------------------------------------------------
-# Intel GPU runtime via .deb packages (stable Nov 2025)
+# Add Intel Graphics repository for GPU runtimes
 # ------------------------------------------------------------
 RUN set -eux; \
-    mkdir -p /tmp/gpu && cd /tmp/gpu; \
-    wget https://github.com/oneapi-src/level-zero/releases/download/v1.20.2/level-zero_1.20.2+u22.04_amd64.deb; \
-    wget https://github.com/intel/intel-graphics-compiler/releases/download/v2.8.3/intel-igc-core-2_2.8.3+18762_amd64.deb; \
-    wget https://github.com/intel/intel-graphics-compiler/releases/download/v2.8.3/intel-igc-opencl-2_2.8.3+18762_amd64.deb; \
-    wget https://github.com/intel/compute-runtime/releases/download/25.09.32961.7/intel-level-zero-gpu_1.6.32961.7_amd64.deb; \
-    wget https://github.com/intel/compute-runtime/releases/download/25.09.32961.7/intel-opencl-icd_25.09.32961.7_amd64.deb; \
-    wget https://github.com/intel/compute-runtime/releases/download/25.09.32961.7/libigdgmm12_22.6.0_amd64.deb; \
-    dpkg -i *.deb || apt-get -fy install; \
-    rm -rf /tmp/gpu
+    wget -qO - https://repositories.intel.com/graphics/intel-graphics.key | \
+        gpg --dearmor -o /usr/share/keyrings/intel-graphics.gpg; \
+    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] \
+        https://repositories.intel.com/graphics/ubuntu jammy arc" \
+        > /etc/apt/sources.list.d/intel-graphics.list; \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        intel-opencl-icd intel-level-zero-gpu level-zero libigdgmm12 && \
+    rm -rf /var/lib/apt/lists/*
 
 # ------------------------------------------------------------
-# Create isolated Python environment (PEP 668 safe)
+# Upgrade pip and core Python build tools
 # ------------------------------------------------------------
 RUN set -eux; \
-    python3 -m venv /opt/venv; \
-    . /opt/venv/bin/activate; \
-    pip install --no-cache-dir --upgrade pip setuptools wheel
-
-ENV PATH="/opt/venv/bin:$PATH"
+    python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
 
 # ------------------------------------------------------------
-# Install PyTorch + IPEX (XPU build)
-# ------------------------------------------------------------
-RUN set -eux; \
-    pip install --no-cache-dir \
-      --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/xpu/us/ \
-      torch==2.3.1 torchvision==0.18.1 intel-extension-for-pytorch==2.3.110+xpu
-
-# ------------------------------------------------------------
-# Install OpenVINO + OVMS
+# Install OpenVINO + Model Server (OVMS)
 # ------------------------------------------------------------
 RUN set -eux; \
     pip install --no-cache-dir openvino==2024.3.0 openvino-dev==2024.3.0; \
-    wget -q https://storage.openvinotoolkit.org/repositories/openvino-model-server/releases/2024/ovms_ubuntu22.tar.gz -O /tmp/ovms.tar.gz; \
-    mkdir -p /opt/ovms && tar -xzf /tmp/ovms.tar.gz -C /opt/ovms --strip-components=1; \
-    rm /tmp/ovms.tar.gz
+    cd /tmp && \
+    wget -q https://github.com/openvinotoolkit/model_server/releases/download/v2024.3.0/ovms_ubuntu22.tar.gz -O ovms.tar.gz; \
+    mkdir -p /opt/ovms && tar -xzf ovms.tar.gz -C /opt/ovms --strip-components=1; \
+    rm ovms.tar.gz
 
 # ------------------------------------------------------------
-# Install IPEX-LLM Ollama portable runtime
+# Set PATH and environment
 # ------------------------------------------------------------
-ARG IPEXLLM_PORTABLE_ZIP_FILENAME=ollama-ipex-llm-2.2.0-ubuntu.tgz
-RUN set -eux; \
-    cd / && \
-    wget -q https://github.com/intel/ipex-llm/releases/download/v2.2.0/${IPEXLLM_PORTABLE_ZIP_FILENAME}; \
-    tar xvf ${IPEXLLM_PORTABLE_ZIP_FILENAME} --strip-components=1 -C /; \
-    rm ${IPEXLLM_PORTABLE_ZIP_FILENAME}
+ENV PATH="/opt/ovms/bin:$PATH"
 
 # ------------------------------------------------------------
-# Performance tuning
+# Default command (interactive shell)
 # ------------------------------------------------------------
-ENV OMP_NUM_THREADS=32 \
-    KMP_BLOCKTIME=1 \
-    KMP_AFFINITY=granularity=fine,compact,1,0 \
-    MALLOC_ARENA_MAX=1
-
-EXPOSE 11434 9000
-
-ENTRYPOINT ["/bin/bash", "/start-ollama.sh"]
+CMD ["/bin/bash"]
