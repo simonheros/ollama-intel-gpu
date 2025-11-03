@@ -1,10 +1,10 @@
 # ============================================================
 # Intel-Optimized Ollama + IPEX-LLM + OpenVINO + OVMS Container
 # Target: Unraid host with Arc A770 × 2 + AMD 5950X
-# Base: Intel oneAPI 2025.3.0 Ubuntu 24.04
+# Base: Intel OneAPI BaseKit 2025.3 (Ubuntu 22.04 – jammy)
 # ============================================================
 
-FROM intel/oneapi-basekit:2025.3.0-0-devel-ubuntu24.04
+FROM intel/oneapi-basekit:2025.3.0-0-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=America/Los_Angeles \
@@ -18,48 +18,49 @@ ENV DEBIAN_FRONTEND=noninteractive \
     OLLAMA_KEEP_ALIVE=0
 
 # ------------------------------------------------------------
-# System setup and Intel GPU user-space drivers
+# System setup and dependencies
 # ------------------------------------------------------------
 RUN set -eux; \
     apt-get update && \
     apt-get install -y --no-install-recommends \
         wget curl gnupg ca-certificates \
-        python3 python3-pip python3-dev python3-venv python3-wheel \
+        python3 python3-pip python3-venv python3-dev \
         git libglib2.0-0 libsm6 libxext6 libxrender-dev \
         ocl-icd-libopencl1 && \
     rm -rf /var/lib/apt/lists/*
 
-# Add Intel Graphics repository for up-to-date GPU runtimes
+# ------------------------------------------------------------
+# Intel GPU runtime (using jammy repo – stable & signed)
+# ------------------------------------------------------------
 RUN set -eux; \
-    wget -qO - https://repositories.intel.com/graphics/intel-graphics.key | gpg --dearmor -o /usr/share/keyrings/intel-graphics.gpg; \
-    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/graphics/ubuntu noble arc" \
+    wget -qO - https://repositories.intel.com/graphics/intel-graphics.key | \
+        gpg --dearmor -o /usr/share/keyrings/intel-graphics.gpg; \
+    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] \
+        https://repositories.intel.com/graphics/ubuntu jammy arc" \
         > /etc/apt/sources.list.d/intel-graphics.list; \
     apt-get update && \
     apt-get install -y --no-install-recommends \
-        intel-opencl-icd intel-level-zero-gpu \
-        level-zero intel-igc-core intel-igc-opencl \
-        libigdgmm12 intel-ocloc && \
+        intel-opencl-icd intel-level-zero-gpu level-zero \
+        intel-igc-core intel-igc-opencl libigdgmm12 intel-ocloc && \
     rm -rf /var/lib/apt/lists/*
 
 # ------------------------------------------------------------
-# Python setup (allow pip inside OneAPI base container)
+# Python environment setup (PEP 668 workaround)
 # ------------------------------------------------------------
 RUN set -eux; \
-    python3 -m ensurepip || true; \
     python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel --break-system-packages
 
 # ------------------------------------------------------------
-# Install PyTorch + Intel Extension for PyTorch (IPEX)
+# Install PyTorch + IPEX (XPU wheels)
 # ------------------------------------------------------------
 RUN set -eux; \
-    echo "Installing PyTorch + Intel IPEX for XPU..."; \
-    python3 -m pip install --no-cache-dir \
-        --break-system-packages \
-        --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/xpu/us/ \
-        torch==2.3.1 torchvision==0.18.1 intel-extension-for-pytorch==2.3.110+xpu
+    echo "Installing PyTorch + IPEX for Intel GPUs..."; \
+    python3 -m pip install --no-cache-dir --break-system-packages \
+      --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/xpu/us/ \
+      "torch==2.3.1" "torchvision==0.18.1" "intel-extension-for-pytorch==2.3.110+xpu"
 
 # ------------------------------------------------------------
-# Install OpenVINO and Model Server
+# Install OpenVINO + Model Server (OVMS)
 # ------------------------------------------------------------
 RUN set -eux; \
     python3 -m pip install --no-cache-dir --break-system-packages \
@@ -79,7 +80,7 @@ RUN set -eux; \
     rm ${IPEXLLM_PORTABLE_ZIP_FILENAME}
 
 # ------------------------------------------------------------
-# Environment tuning for AMD + Intel hybrid host
+# Performance tuning
 # ------------------------------------------------------------
 ENV OMP_NUM_THREADS=32 \
     KMP_BLOCKTIME=1 \
@@ -87,7 +88,7 @@ ENV OMP_NUM_THREADS=32 \
     MALLOC_ARENA_MAX=1
 
 # ------------------------------------------------------------
-# Expose Ollama + OVMS ports
+# Expose ports
 # ------------------------------------------------------------
 EXPOSE 11434 9000
 
