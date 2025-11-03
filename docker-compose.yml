@@ -41,8 +41,6 @@ services:
       OLLAMA_KEEP_ALIVE: "0"
       OLLAMA_NUM_CPU: "32"
       OLLAMA_HOST: "0.0.0.0"
-      OPENVINO_DEVICE: "GPU"
-      OPENVINO_LOG_LEVEL: "INFO"
 
       # ==== Networking ====
       OLLAMA_PORT: "11434"
@@ -61,40 +59,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
-
-  # --------------------------------------------------------------------------
-  # OpenVINO Model Server (OVMS) for high-throughput inference serving
-  # --------------------------------------------------------------------------
-  ovms:
-    image: openvino/model_server:latest
-    container_name: ovms
-    restart: unless-stopped
-    privileged: true
-    devices:
-      - /dev/dri:/dev/dri
-    volumes:
-      - ./ovms_models:/models
-    command:
-      [
-        "--model_path", "/models",
-        "--port", "9000",
-        "--rest_port", "9001",
-        "--grpc_bind_address", "0.0.0.0",
-        "--rest_bind_address", "0.0.0.0",
-        "--nireq", "2",
-        "--device", "GPU",
-        "--plugin_config", "INFERENCE_PRECISION_HINT=bf16,PERFORMANCE_HINT=THROUGHPUT"
-      ]
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      - OPENVINO_LOG_LEVEL=INFO
-      - SYCL_DEVICE_FILTER=level_zero:gpu
-      - ONEAPI_DEVICE_SELECTOR=level_zero:gpu
-      - ZES_ENABLE_SYSMAN=1
-    depends_on:
-      - ollama-intel-gpu
 
   # --------------------------------------------------------------------------
   # OpenWebUI (front-end for Ollama)
