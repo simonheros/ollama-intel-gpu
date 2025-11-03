@@ -16,55 +16,84 @@ RUN set -eux; \
         clinfo \
         vainfo \
         mesa-utils \
-        intel-opencl-icd \
-        intel-level-zero-gpu \
         hwloc \
         wget \
         curl \
         vim \
         less \
         jq \
-        python3-pip && \
+        python3-pip \
+        python3-setuptools && \
     rm -rf /var/lib/apt/lists/*
+
+# ------------------------------------------------------------
+# Install Intel GPU runtime components
+# Note: These might already be included in the base image
+# ------------------------------------------------------------
+RUN set -eux; \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        ocl-icd-libopencl1 \
+        intel-opencl-icd \
+        intel-level-zero-gpu && \
+    rm -rf /var/lib/apt/lists/* || echo "Some packages may not be available, continuing..."
 
 # ------------------------------------------------------------
 # Add GPU diagnostics script
 # ------------------------------------------------------------
 RUN tee /usr/local/bin/check-gpu >/dev/null <<'EOF'
 #!/bin/bash
-set -eux
+set -e
 echo "=== Intel GPU Diagnostic Summary ==="
 
 echo
 echo "-> PCI Devices:"
-lspci | grep -i 'vga\|3d\|display' || true
+lspci | grep -i 'vga\|3d\|display' || echo "No GPU devices found via lspci"
 
 echo
 echo "-> /dev/dri contents:"
-ls -l /dev/dri || true
+ls -l /dev/dri 2>/dev/null || echo "/dev/dri not accessible"
 
 echo
 echo "-> oneAPI Level Zero devices:"
-if command -v ze_device_info &>/dev/null; then
-    ze_device_info || echo "ze_device_info not available."
+if command -v sycl-ls &>/dev/null; then
+    sycl-ls 2>/dev/null || echo "sycl-ls found but execution failed"
+elif command -v ze_device_info &>/dev/null; then
+    ze_device_info 2>/dev/null || echo "ze_device_info found but execution failed"
 else
-    echo "ze_device_info not installed."
+    echo "Level Zero tools not available"
 fi
 
 echo
 echo "-> OpenCL (clinfo):"
-clinfo | grep -E "Platform Name|Device Name" || true
+if command -v clinfo &>/dev/null; then
+    clinfo 2>/dev/null | grep -E "Platform Name|Device Name|Device Type" | head -10 || echo "clinfo executed but no devices found"
+else
+    echo "clinfo not installed"
+fi
 
 echo
 echo "-> PyTorch XPU detection:"
 python3 - <<'PYCODE'
-import torch
-if hasattr(torch, "xpu"):
-    print("XPU device count:", torch.xpu.device_count())
-    for i in range(torch.xpu.device_count()):
-        print(" -", torch.xpu.get_device_name(i))
-else:
-    print("No XPU backend in torch.")
+try:
+    import torch
+    print(f"PyTorch version: {torch.__version__}")
+    if hasattr(torch, "xpu") and callable(getattr(torch.xpu, "device_count", None)):
+        count = torch.xpu.device_count()
+        print(f"XPU device count: {count}")
+        for i in range(count):
+            print(f" - Device {i}: {torch.xpu.get_device_name(i)}")
+    else:
+        print("XPU not available in this PyTorch build")
+        
+    # Check for CUDA as well
+    if torch.cuda.is_available():
+        print(f"CUDA device count: {torch.cuda.device_count()}")
+    else:
+        print("CUDA not available")
+        
+except Exception as e:
+    print(f"Error checking PyTorch devices: {e}")
 PYCODE
 EOF
 
@@ -74,18 +103,29 @@ RUN chmod +x /usr/local/bin/check-gpu
 # Install Python dependencies for Intel PyTorch + OpenVINO
 # ------------------------------------------------------------
 RUN set -eux; \
+    pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir \
-        torch==2.3.1+cpu \
-        torchvision==0.18.1+cpu \
-        torchaudio==2.3.1+cpu \
+        numpy==1.26.4 \
+        requests==2.32.3 && \
+    rm -rf /root/.cache/pip
+
+# Install PyTorch with Intel extensions separately to handle dependencies
+RUN set -eux; \
+    pip install --no-cache-dir \
+        torch==2.3.1 \
+        torchvision==0.18.1 \
+        torchaudio==2.3.1 \
         --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir \
         intel-extension-for-pytorch==2.3.100 \
-        ipex-llm==2.2.0 \
+        ipex-llm==2.2.0 && \
+    rm -rf /root/.cache/pip
+
+# Install OpenVINO separately
+RUN set -eux; \
+    pip install --no-cache-dir \
         openvino==2024.3.0 \
-        openvino-dev==2024.3.0 \
-        numpy==1.26.4 \
-        requests==2.32.3 && \
+        openvino-dev==2024.3.0 && \
     rm -rf /root/.cache/pip
 
 # ------------------------------------------------------------
